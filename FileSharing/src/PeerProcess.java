@@ -38,9 +38,7 @@ public class PeerProcess {
 	private int numberOfConPeers;
 	private ServerSocket server;
 
-	boolean hasFile;
 	private int optimesticUnchokedPeerIndex;
-	public PeerInfo CurrentPeerInfo;
 	
 	public static void main(String[] args){
 		String myPeerId;
@@ -124,7 +122,7 @@ public class PeerProcess {
 		startListening();
 		// make TCP connection to the peers that already in system
 		for (int i = 0; i < this.index; i++) {
-			createConnection(i);
+			createConnection(i, neighborPeer.get(i));
 			this.numberOfConPeers++;
 		}		
 	}
@@ -138,8 +136,10 @@ public class PeerProcess {
 			e.printStackTrace();
 		}						
 	}
-	private void createConnection(int index) {
-      //    this.peersConnections[index]=new Connection(this.neighborPeer.get(index).getPeerId(),this);
+	private void createConnection(int index, PeerInfo info) {
+		Connection connection = new Connection(info, index, this);
+		peersConnections[index] = connection;
+		connection.connect();
 	}
 
 	private void startCalculatingPreferredPeers() {

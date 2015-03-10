@@ -104,7 +104,7 @@ public class Connection {
 			byte[] packet = bitFieldMessage.packMessage(messageLength,
 					Message.MessageType.BITFIELD, currentNode.getCurrentBitField());
 			outStream.write(packet);
-			while (!currentNode.hasFile) {
+			while (!currentNode.getMyself().isCompleteFile()) {
 				// wait for bitfield message from connected peer
 				while (!bitFieldReceived)
 					;
@@ -227,7 +227,7 @@ public class Connection {
 
 		try {
 			String header = handShakeMessage + "0000000000"
-					+ currentNode.CurrentPeerInfo.getPeerId();
+					+ currentNode.getMyself().getPeerId();
 			outStream.write(header.getBytes());
 			outStream.flush();
 		} catch (IOException e) {
