@@ -242,7 +242,7 @@ public class Connection {
 			String message = new String(handshake);
 			if (message.startsWith(handShakeMessage)) {
 				String id = message.substring(message.lastIndexOf('0') + 1);
-//				peerInfo = new PeerInfo(id, null, null);
+				peerInfo = new PeerInfo(id);
 				return true;
 			}
 		} catch (IOException e) {

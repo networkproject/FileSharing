@@ -13,6 +13,9 @@ public class PeerInfo {
 		this.isCompleteFile = isCompleteFile;
 	}
 
+	public PeerInfo(String peerId) {
+		this.peerId = peerId;
+	}
 	public String getPeerId() {
 		return peerId;
 	}
