@@ -108,12 +108,14 @@ public class PeerProcess {
 			e.printStackTrace();
 		}
 		this.numberOfPieces=(int)Math.ceil(this.fileSize/(double)this.pieceSize);
+		int numberOfBytes = numberOfPieces /8;//8 bits per byte and each represent a piece
 		this.numberOfPeers=index-1;
 		downloadRate = new int[numberOfPeers];
 		isPreferred = new boolean[numberOfPeers];
 		peersConnections = new Connection[numberOfPeers];
 		neighborsBitFields = new byte[numberOfPeers][numberOfPieces];
-		
+		currentBitField = new byte[numberOfBytes];
+		isRequested = new boolean[numberOfPieces];
 		// create the thread that calculate preferable peers(chocks/ unchocks)
 		startCalculatingPreferredPeers();
 		// create the thread that calculate optimistic peer
