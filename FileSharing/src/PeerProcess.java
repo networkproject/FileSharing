@@ -2,15 +2,17 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.Vector;
 
 public class PeerProcess {
 
-	// number of peers in the system
-	private int numberOfPeers;
-	private int numberOfPieces;
-	// number of preferred neighbors
-	private int NumberOfPreferredPeers;
+	/*common properties used for all peers*/
+	private int numberOfPeers;// number of peers in the system
+	private int numberOfPieces;	
+	private int NumberOfPreferredPeers;// number of preferred neighbors
+
+
 	private int UnchokingInterval;
 	private int OptimisticUnchokingInterval;
 
@@ -18,27 +20,28 @@ public class PeerProcess {
 	private long fileSize;
 	private long pieceSize;
 
-	// have the download rate per each peer
-	private int[] downloadRate;
-	private boolean[] isInterested;
-	// each entry is true if the peer is preferable, false otherwise
-	private boolean[] isPreferred;
-	// each entry correspond to a peer connection(contain socket, id ,
-	// index,....)
-	private Connection[] peersConnections;
-	//maintain bit field for each peer
-	private byte[][] neighborsBitFields;
-	
-	private byte[] currentBitField;
-	private boolean[] isRequested;
-	private Vector<PeerInfo> neighborPeer;
+   /*properties used for myself*/
 	private PeerInfo myself;
-	
-	private int index; 
-	private int numberOfConPeers;
+
 	private ServerSocket server;
 
+	private int index; //the index in the Common.cfg	
+	private byte[] currentBitField;//my bitfield
+	private boolean[] isRequested;//record if each piece has been requested
+	
+	/*properties used for other peers*/
+	private int[] downloadRate;// have the download rate per each peer
+	private boolean[] isInterested;//recode if the neighbor peers are interested in my file	
+	private boolean[] isPreferred;// each entry is true if the peer is preferable, false otherwise	
+	private Connection[] peersConnections;// each entry correspond to a peer connection(socket,id,index,....)	
+	private byte[][] neighborsBitFields;//maintain bit field for each peer
+	private Vector<PeerInfo> neighborPeers;//the basic information for neighbor peers(id,address,port)
 	private int optimesticUnchokedPeerIndex;
+
+
+	/*
+	private PeerInfo CurrentPeerInfo;*/
+
 	
 	public static void main(String[] args){
 		String myPeerId;
@@ -56,11 +59,11 @@ public class PeerProcess {
 		myprocess.init(myPeerId);
 	}
 
-	public void init(String myPeerId) {
+		public void init(String myPeerId) {
 		// read the configuration files, initialize variables
 		//ex:
 		String st;
-		int index=0;
+		int connectPeers=0;
 		try {
 			BufferedReader in = new BufferedReader(new FileReader("PeerInfo.cfg"));
 			while((st = in.readLine()) != null) {
@@ -68,16 +71,17 @@ public class PeerProcess {
 				 String[] tokens = st.split("\\s+");
 				 String peerId=tokens[0];
 				 String hostname=tokens[1];
-				 int portnumber=Integer.parseInt(tokens[2]);
-				 boolean isCompleteFile=tokens[3].equals("1")? true : false;
-				
+				 String portnumber=tokens[2];			
+                 boolean hasFile=tokens[3].equals("1")? true : false;
+
 				 
 				 if(peerId.equals(myPeerId)){
-					 this.index=index;
-					 this.myself=new PeerInfo(peerId,hostname,portnumber,isCompleteFile);
+					 this.index=connectPeers;
+					 this.myself=new PeerInfo(peerId,hostname,portnumber,hasFile);
+
 				 }
-				 else  this.neighborPeer.add(new PeerInfo(peerId,hostname,portnumber,isCompleteFile));	 
-				 index++;	
+				 else  this.neighborPeers.add(new PeerInfo(peerId,hostname,portnumber,hasFile));	 
+				 connectPeers++;	
 			}			
 			in.close();			
 		} catch (IOException e) {
@@ -107,43 +111,64 @@ public class PeerProcess {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		
 		this.numberOfPieces=(int)Math.ceil(this.fileSize/(double)this.pieceSize);
-		int numberOfBytes = numberOfPieces /8;//8 bits per byte and each represent a piece
-		this.numberOfPeers=index-1;
+
+		this.numberOfPeers=connectPeers-1;
 		downloadRate = new int[numberOfPeers];
 		isPreferred = new boolean[numberOfPeers];
 		peersConnections = new Connection[numberOfPeers];
 		neighborsBitFields = new byte[numberOfPeers][numberOfPieces];
-		currentBitField = new byte[numberOfBytes];
-		isRequested = new boolean[numberOfPieces];
-		// create the thread that calculate preferable peers(chocks/ unchocks)
-		startCalculatingPreferredPeers();
-		// create the thread that calculate optimistic peer
-		startCalculatingOptimisticPeer();
+
+		
 		//start listen
 		startListening();
 		// make TCP connection to the peers that already in system
 		for (int i = 0; i < this.index; i++) {
-			createConnection(i, neighborPeer.get(i));
-			this.numberOfConPeers++;
-		}		
+			createConnection(i);
+
+		}	
+		// create the thread that calculate preferable peers(chocks/ unchocks)
+		startCalculatingPreferredPeers();
+		// create the thread that calculate optimistic peer
+		startCalculatingOptimisticPeer();		
 	}
 	
 	private void startListening() {		
 		//start server sockets
 		//listen to peers that comes after and wants to make tcp connection
 		try {
-			this.server=new ServerSocket(this.myself.getPortnumber());
+			this.server=new ServerSocket(Integer.parseInt(this.myself.getPortnumber()));
+			while(true){
+				Socket client=server.accept();
+				String client_hostname=client.getInetAddress().getHostName();
+				int indexPeer=-1;
+				for(int i=0;i<this.neighborPeers.size();i++){
+					if(client_hostname.equals(neighborPeers.elementAt(i).getHostname())){
+						indexPeer=i;
+						break;
+					}						
+				}
+				if(indexPeer!=-1)
+					this.createConnectionForPeer(indexPeer, client);
+			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}						
 	}
-	private void createConnection(int index, PeerInfo info) {
-		Connection connection = new Connection(info, index, this);
-		peersConnections[index] = connection;
-		connection.connect();
+
+    private void createConnection(int index) {
+
+         this.peersConnections[index]=new Connection(neighborPeers.elementAt(index),index,this);   
+         this.peersConnections[index].connect();
 	}
 
+	private void createConnectionForPeer(int index,Socket socket){
+		this.peersConnections[index]=new Connection(neighborPeers.elementAt(index),index,this);
+
+		this.peersConnections[index].setTcpConnection(socket);
+	}
+	
 	private void startCalculatingPreferredPeers() {
 		// preferred peers will be chosen at random for the first time , then
 		// will be chosen based on download rate
@@ -277,12 +302,12 @@ public class PeerProcess {
 		this.isRequested = isRequested;
 	}
 
-	public Vector<PeerInfo> getNeighborPeer() {
-		return neighborPeer;
+	public Vector<PeerInfo> getNeighborPeers() {
+		return neighborPeers;
 	}
 
 	public void setNeighborPeer(Vector<PeerInfo> neighborPeer) {
-		this.neighborPeer = neighborPeer;
+		this.neighborPeers = neighborPeer;
 	}
 
 	public PeerInfo getMyself() {
@@ -299,14 +324,6 @@ public class PeerProcess {
 
 	public void setIndex(int index) {
 		this.index = index;
-	}
-
-	public int getNumberOfConPeers() {
-		return numberOfConPeers;
-	}
-
-	public void setNumberOfConPeers(int numberOfConPeers) {
-		this.numberOfConPeers = numberOfConPeers;
 	}
 
 	public ServerSocket getServer() {

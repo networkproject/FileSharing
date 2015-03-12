@@ -64,7 +64,7 @@ public class Connection {
 	public void connect() {
 
 		try {
-			tcpConnection = new Socket(peerInfo.getHostname(),peerInfo.getPortnumber());
+			tcpConnection = new Socket(peerInfo.getHostname(),Integer.parseInt(peerInfo.getPortnumber()));
 			init();
 			// send the handshake message
 			sendHandShakeMessage();

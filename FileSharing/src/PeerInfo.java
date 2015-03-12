@@ -2,10 +2,10 @@
 public class PeerInfo {
     private String peerId;
     private String hostname;
-    private int portnumber;
+    private String portnumber;
     private boolean isCompleteFile;
     
-	public PeerInfo(String peerId, String hostname, int portnumber,
+	public PeerInfo(String peerId, String hostname, String portnumber,
 			boolean isCompleteFile) {
 		this.peerId = peerId;
 		this.hostname = hostname;
@@ -32,11 +32,11 @@ public class PeerInfo {
 		this.hostname = hostname;
 	}
 
-	public int getPortnumber() {
+	public String getPortnumber() {
 		return portnumber;
 	}
 
-	public void setPortnumber(int portnumber) {
+	public void setPortnumber(String portnumber) {
 		this.portnumber = portnumber;
 	}
 
