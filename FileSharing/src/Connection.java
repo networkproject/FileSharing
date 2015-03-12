@@ -256,19 +256,22 @@ public class Connection {
 		for (int i = 0; i < 4; i++) {
 			result = (result << 8) + (payload[i] & 0xff);
 		}
-		return result;
+		return (long) (Math.log(result) / Math.log(2));
 	}
 
 	private void pieceIndexToByte(long pieceIndex, byte[] payload) {
+		long pieceIndexValue = (long) Math.pow(2, pieceIndex);
 		for (int i = 0; i < 4; i++) {
-			payload[3 - i] = (byte) (0xff & (pieceIndex >> 8 * i));
+			payload[3 - i] = (byte) (0xff & (pieceIndexValue >> 8 * i));
 			;
 		}
 	}
 
 	public static void main(String[] args) {
-		byte[] bytes = new byte[] { (byte) 0x2F, (byte) 0x01, (byte) 0x10,
-				(byte) 0x6F };
+//		byte[] bytes = new byte[] { (byte) 0x2F, (byte) 0x01, (byte) 0x10,
+//				(byte) 0x6F };
+		byte[] bytes = new byte[] { (byte) 0x00, (byte) 0x00, (byte) 0x01,
+				(byte) 0x00 };
 		Connection connection = new Connection(null, 0, null);
 		System.out.println(connection.getPieceIndex(bytes));
 		long number = connection.getPieceIndex(bytes);
