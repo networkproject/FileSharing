@@ -3,7 +3,12 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Random;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.Vector;
+import java.util.Random;
 
 public class PeerProcess {
 
@@ -37,7 +42,8 @@ public class PeerProcess {
 	private byte[][] neighborsBitFields;//maintain bit field for each peer
 	private Vector<PeerInfo> neighborPeers;//the basic information for neighbor peers(id,address,port)
 	private int optimesticUnchokedPeerIndex;
-
+    private Timer optiUnchockTimer;
+    private Timer unchockTimer;
 
 	/*
 	private PeerInfo CurrentPeerInfo;*/
@@ -120,6 +126,9 @@ public class PeerProcess {
 		peersConnections = new Connection[numberOfPeers];
 		neighborsBitFields = new byte[numberOfPeers][numberOfPieces];
 
+		this.optiUnchockTimer=new Timer();		
+		this.unchockTimer=new Timer();
+		
 		
 		//start listen
 		startListening();
@@ -172,12 +181,118 @@ public class PeerProcess {
 	private void startCalculatingPreferredPeers() {
 		// preferred peers will be chosen at random for the first time , then
 		// will be chosen based on download rate
+		this.unchockTimer.schedule(new UnchockTask(),0, this.UnchokingInterval*1000);
 	}
 
 	private void startCalculatingOptimisticPeer() {
-
+		this.optiUnchockTimer.schedule(new OptiUnchockTask(),0,this.OptimisticUnchokingInterval*1000);
 	}
 
+	class UnchockTask extends TimerTask{
+		public void run(){
+			boolean[] tempPreferred=new boolean[numberOfPeers];
+			for(int n=0;n<numberOfPeers;n++)
+				tempPreferred[n]=false;
+			
+			Vector<Integer> randomSet=new Vector<Integer>();
+			Random r=new Random();
+			for(int i=0;i<numberOfPeers;i++){
+				if(isInterested[i])
+				  randomSet.add(i);
+			}
+			//randomly selected if I have file
+			if(myself.isCompleteFile()){
+				for(int i=NumberOfPreferredPeers;i>0 && randomSet.size()>0;i--){
+					int randIndex=r.nextInt(randomSet.size());
+					//set the corresponding peer to be preferred
+					//if it has been unchocked, no need to send unchocked message
+					if(!isPreferred[randomSet.get(randIndex)]){
+						tempPreferred[randomSet.get(randIndex)]=true;
+						//send unchocked message
+					}
+					else{
+						tempPreferred[randomSet.get(randIndex)]=true;
+					}
+					randomSet.remove(randIndex);
+				}
+			}
+			//select according to download rate
+			else{
+			    int m=NumberOfPreferredPeers;			    
+			    while(m>0 && randomSet.size()>0){
+			    	int high=-1;	
+			    	ArrayList<Integer> temp=new ArrayList<Integer>();
+			    	for(int j=0;j<randomSet.size();j++){
+			    		if(high<downloadRate[randomSet.get(j)]){
+			    			high=downloadRate[randomSet.get(j)];
+			    			temp.clear();
+			    			temp.add(j);
+			    		}
+			    		else if(high==downloadRate[randomSet.get(j)]){
+			    			temp.add(j);
+			    		}
+			    	}
+			    	
+			    	if(temp.size()<m){
+			    		//all these set to be preferred
+			    		for(int j=0;j<temp.size();j++){
+			    			if(!isPreferred[randomSet.get(temp.get(j))]){
+								tempPreferred[randomSet.get(temp.get(j))]=true;
+								//send unchocked message
+							}
+							else{
+								tempPreferred[randomSet.get(temp.get(j))]=true;
+							}
+			    			//remove these value from randomSet
+			    			randomSet.remove(temp.get(j)-j);
+			    		}			    		
+			    		m=m-temp.size();
+			    	}
+			    	else{
+			    		//we just need to randomly select m numbers
+			    		for(int j=m;j>0;j--){
+							int randIndex=r.nextInt(temp.size());
+							//set the corresponding peer to be preferred
+							//if it has been unchocked, no need to send unchocked message
+							if(!isPreferred[randomSet.get(temp.get(randIndex))]){
+								tempPreferred[randomSet.get(temp.get(randIndex))]=true;
+								//send unchocked message
+							}
+							else{
+								tempPreferred[randomSet.get(temp.get(randIndex))]=true;
+							}
+						}
+			    		m=0;
+			    	}
+			    }
+			}
+			
+			isPreferred=tempPreferred;
+		}
+	}
+	
+	class OptiUnchockTask extends TimerTask{
+		public void run(){
+			Vector<Integer> randomSet=new Vector<Integer>();
+			for(int i=0;i<numberOfPeers;i++){
+				//choose interested but chocked
+				if(isInterested[i]&&(!isPreferred[i])){
+					randomSet.add(i);
+				}
+			}
+			if(randomSet.size()==0)
+				optimesticUnchokedPeerIndex=-1;
+			else if(randomSet.size()==1)
+				optimesticUnchokedPeerIndex=randomSet.elementAt(0);
+			else{
+				int size=randomSet.size();
+				Random r=new Random();
+				int s=r.nextInt(size);
+				optimesticUnchokedPeerIndex=randomSet.elementAt(s);
+				//sends unckocked message to this selected peer
+			}
+		}
+	}
 	public void increaseDownloadRate(int peerIndex) {
 		downloadRate[peerIndex]++;
 	}
