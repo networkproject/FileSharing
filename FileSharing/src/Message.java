@@ -92,7 +92,8 @@ public class Message {
         	 this.messageType=MessageType.PIECE;
         	 break;
          }
-         System.arraycopy(messageStream, 5, this.messagePayload, 0, messageStream.length-5);
+         messagePayload = new byte[messageStream.length-5];
+         System.arraycopy(messageStream, 5, this.messagePayload, 0, messagePayload.length);
 	}
 	private byte[] messageLengthToByte(long messageLength ) {
 		byte[] length = new byte[4];

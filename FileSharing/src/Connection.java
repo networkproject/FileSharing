@@ -324,7 +324,7 @@ public class Connection {
 			;
 		}
 	}
-
+/**
 	public static void main(String[] args) {
 //		byte[] bytes = new byte[] { (byte) 0x2F, (byte) 0x01, (byte) 0x10,
 //				(byte) 0x6F };
@@ -338,5 +338,5 @@ public class Connection {
 		for (int i = 0; i < bytess.length; i++) {
 			System.out.println(bytess[i]);
 		}
-	}
+	}*/
 }

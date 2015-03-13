@@ -8,7 +8,6 @@ import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.Vector;
-import java.util.Random;
 
 public class PeerProcess {
 
