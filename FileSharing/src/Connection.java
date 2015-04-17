@@ -26,7 +26,6 @@ public class Connection {
 	private String handShakeMessage;
 	private byte[] data;
 
-	private boolean bitFieldReceived;
 
 	private byte[] peerBitField;
 
@@ -38,7 +37,10 @@ public class Connection {
 	
 	//if send request wait for apiece to be downloaded completely until request another piece
 	private boolean waitForPiece;
+	
+//	private ArrayList<String> mesgBuffer; // a buffer to store the msg than needs to be send
 
+	private Logger logger;
 	/**
 	 * constructor, inits the parameters
 	 * 
@@ -50,12 +52,12 @@ public class Connection {
 		this.peerInfo = info;
 		this.index = indx;
 		this.currentNode = nodeReference;
-		bitFieldReceived = false;
 		handShakeMessage = "P2PFILESHARINGPROJ";
 		interested = false;
 		numberofPieces = currentNode.getNumberOfPieces();
 		sendRequest = false;
 		waitForPiece = false;
+		logger  = Logger.getInstance();
 	}
 
 	/**
@@ -89,7 +91,7 @@ public class Connection {
 	public void init() {
 		// maximum number of bytes any peer can send is (4-bytes message length
 		// + 1-byte message type + piece size
-		data = new byte[(int) (currentNode.getPieceSize() + 5)];
+	//	data = new byte[(int) (currentNode.getPieceSize() + 5)];
 		try {
 			inStream = tcpConnection.getInputStream();
 			outStream = tcpConnection.getOutputStream();
@@ -107,16 +109,21 @@ public class Connection {
 			// send current bit field message
 			// message length = number of bytes of bit field byte array + 1 byte
 			// for message type
-			int messageLength = (int) Math
-					.floor(numberofPieces / 8) + 1;
-			Message bitFieldMessage = new Message();
-			byte[] packet = bitFieldMessage.packMessage(messageLength,
-					Message.MessageType.BITFIELD, currentNode.getCurrentBitField());
-			outStream.write(packet);
+           /*	If I have pieces, I need to send bitfield	message	 by Yuanfang*/
+			byte[] packet;
+			if(this.currentNode.getIfHavePieces()){
+//				 messageLength= (int) Math
+//						.ceil(numberofPieces / 8.0) + 1;
+				Message bitFieldMessage = new Message();
+				packet = bitFieldMessage.packMessage(
+						Message.MessageType.BITFIELD, currentNode.getCurrentBitField());
+				outStream.write(packet);
+			}
+			
 			while (!currentNode.getMyself().isCompleteFile()) {
 				// wait for bitfield message from connected peer
 				// if not interested, then no need to continue
-				while (!bitFieldReceived || !sendRequest || waitForPiece || !interested)
+				while (!sendRequest || waitForPiece || !interested)
 					;
 				
 				
@@ -135,12 +142,11 @@ public class Connection {
 				}
 				if(found) {
 					//send request message with the piece index
-					byte[]pieceIndex = new byte[4];
-					pieceIndexToByte(i, pieceIndex);
+					byte[]pieceIndex;
+					pieceIndex=String.format("%4d", i).getBytes();
 					//1 type + 4 piece index
-					messageLength = 5;
 					Message request = new Message();
-					packet = request.packMessage(messageLength, Message.MessageType.REQUEST, pieceIndex);
+					packet = request.packMessage(Message.MessageType.REQUEST, pieceIndex);
 					outStream.write(packet);
 					waitForPiece = true;
 				}
@@ -159,30 +165,44 @@ public class Connection {
 	}
 
 	private void startListening() {
-		long pieceIndex;
+		byte[] piece_index=new byte[4];
+		byte[] msg_len=new byte[4];
+		int pieceIndex;
 		while (true) {
 			try {
-				data = new byte[(int) (currentNode.getPieceSize() + 5)];
+				this.inStream.read(msg_len);
+				int len=Integer.parseInt(new String(msg_len));
+				data = new byte[len];
 				inStream.read(data);
 				Message message = new Message();
 				message.unpack(data);
 				switch (message.getMessageType()) {
 				case CHOKE:
 					sendRequest = false;
+					logger.writeLog(PeerProcess.getTime() ,  "Peer " + currentNode.getMyself().getPeerId() + " is choked by " + peerInfo.getPeerId());
+					
 					break;
 				case UNCHOKE:
 					sendRequest = true;
+					logger.writeLog(PeerProcess.getTime() ,  "Peer " + currentNode.getMyself().getPeerId() + " is unchoked by " + peerInfo.getPeerId());
+					
 					break;
 				case INTERESTED:
 					//update currentNode
+					logger.writeLog(PeerProcess.getTime(),  "Peer " + currentNode.getMyself().getPeerId() + " received the \'interested\' message from " + peerInfo.getPeerId() + " for the piece");
+					
 					currentNode.setIntereseted(index);
 					break;
 				case NOT_INTERESTED:
+					logger.writeLog(PeerProcess.getTime(), "Peer " + currentNode.getMyself().getPeerId() + " received the \'not interested\' message from " + peerInfo.getPeerId() + " for the piece");
+					
 					currentNode.unSetIntereseted(index);
 					break;
 				case HAVE:
-					pieceIndex = getPieceIndex(message.getMessagePayload());
-					//update bit field of current connected peer
+					System.arraycopy(data,1 , piece_index, 0, 4);
+					pieceIndex = Integer.parseInt(new String(piece_index));
+					logger.writeLog(PeerProcess.getTime() , "Peer " + currentNode.getMyself().getPeerId() + " received the \'have\' message from " + peerInfo.getPeerId() + " for the piece" + pieceIndex);
+					
 					currentNode.updatePeerBitField(index, pieceIndex);
 					//send interested or not interested message
 					Message interestedMessage = new Message();
@@ -190,7 +210,7 @@ public class Connection {
 					
 					if(!currentNode.havePiece(pieceIndex)) 
 						interestedMessageType = Message.MessageType.INTERESTED;
-					byte[] messageToSend = interestedMessage.packMessage(1, interestedMessageType,
+					byte[] messageToSend = interestedMessage.packMessage(interestedMessageType,
 							null);
 					outStream.write(messageToSend);
 					interested = true;
@@ -206,32 +226,34 @@ public class Connection {
 					Message.MessageType type = Message.MessageType.NOT_INTERESTED;
 					for (int i = 0; i < numberofPieces; i++) {
 						if (currentNode.getBitValue(peerBitField[i / 8], i)
-								&& !currentNode.havePiece(i)) {
+								&& !currentNode.havePiece(i)) {//just have piece?
 							interested = true;
 							type = Message.MessageType.INTERESTED;
 							break;
 						}
 					}
-					byte[] packetToSend = interestMessage.packMessage(1, type,
+					byte[] packetToSend = interestMessage.packMessage(type,
 							null);
 					outStream.write(packetToSend);
-					bitFieldReceived = true;
 					break;
 				case REQUEST:
 					if(currentNode.isPrefered(index)||currentNode.isOptimesticUnchockedNeighbor(index)) {
 						//send the piece 
 						// read the first 4-byte piece index
-						pieceIndex = getPieceIndex(message.getMessagePayload());
+						System.arraycopy(data,1 , piece_index, 0, 4);
+						pieceIndex = Integer.parseInt(new String(piece_index));
 						if(currentNode.havePiece(pieceIndex)) {
 							//send the piece, read partial file and send it
 							byte[] buffer = new byte[(int) currentNode.getPieceSize()];
-							InputStream reader = new FileInputStream(new File(currentNode.getMyself().getPeerId() + "/" + pieceIndex));
+							InputStream reader = new FileInputStream(new File(currentNode.getFolderName() + "\\" + pieceIndex));
 							reader.read(buffer);
 							reader.close();
 							byte[] toSend = new byte[buffer.length + 4];
 							System.arraycopy(buffer, 0, toSend, 4, buffer.length);
+							//add pieceIndex to to send
+							System.arraycopy(piece_index, 0, toSend, 0, 4);
 							Message pieceMessage = new Message();
-							byte[] packet = pieceMessage.packMessage(toSend.length + 1, Message.MessageType.PIECE, toSend);
+							byte[] packet = pieceMessage.packMessage( Message.MessageType.PIECE, toSend);
 							outStream.write(packet);
 						}
 					}
@@ -239,25 +261,27 @@ public class Connection {
 				case PIECE:
 					waitForPiece = false;
 					// read the first 4-byte piece index
-					pieceIndex = getPieceIndex(message.getMessagePayload());
+					System.arraycopy(data,1 , piece_index, 0, 4);
+					pieceIndex = Integer.parseInt(new String(piece_index));
 					currentNode.pieceReceived(pieceIndex);
 					currentNode.increaseDownloadRate(index);
 					//download the piece
-					OutputStream writer = new FileOutputStream(new File(currentNode.getMyself().getPeerId() + "/" + pieceIndex));
+					OutputStream writer = new FileOutputStream(new File(currentNode.getFolderName() + "\\" + pieceIndex));
 					byte[] buffer = new byte[(int) currentNode.getPieceSize()];
 					System.arraycopy(message.getMessagePayload(), 4, buffer, 0, buffer.length);
 					writer.write(buffer);
 					writer.close();
+					currentNode.incrementNumberPieceHave();
+					logger.writeLog(PeerProcess.getTime() ,  "Peer " + currentNode.getMyself().getPeerId() + " has downloaded the piece "  + pieceIndex + " from " + peerInfo.getPeerId() + ". Now the number of pieces it has is " + currentNode.getNumberPieceHave());
+					if(currentNode.getMyself().isCompleteFile())
+						logger.writeLog(PeerProcess.getTime() ,  "Peer " + currentNode.getMyself().getPeerId() + " has downloaded the complete file");
+					
 					// send have message as bit field changes
 					//send request message with the piece index
-					byte[]pieceIndexField = new byte[4];
-					pieceIndexToByte(pieceIndex, pieceIndexField);
 					//1 type + 4 piece index
-					int messageLength = 5;
-					Message request = new Message();
-					byte[] packet = request.packMessage(messageLength, Message.MessageType.HAVE, pieceIndexField);
-					outStream.write(packet);
-					
+					//should be send others peer, so many message here
+					//also look for neighborbit field decide whether should send "NotInterested"
+					currentNode.sendHaveMessage(index, piece_index);
 					break;
 				default:
 					System.out.println("Undefined message received");
@@ -299,9 +323,13 @@ public class Connection {
 			inStream.read(handshake);
 			String message = new String(handshake);
 			if (message.startsWith(handShakeMessage)) {
-				String id = message.substring(message.lastIndexOf('0') + 1);
-				peerInfo = new PeerInfo(id);
-				return true;
+				String id = message.substring(29);
+				/*Here we need to check if the peer id is the expected one by Yuanfang*/
+				if(id.equals(this.currentNode.getNeighborPeers().get(index).getPeerId())){
+					peerInfo = new PeerInfo(id);
+					return true;
+				}
+				else return false;
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -309,19 +337,48 @@ public class Connection {
 		return false;
 	}
 
-	private long getPieceIndex(byte[] payload) {
+/*	private long getPieceIndex(byte[] payload) {
 		Long result = 0L;
 		for (int i = 0; i < 4; i++) {
 			result = (result << 8) + (payload[i] & 0xff);
 		}
 		return (long) (Math.log(result) / Math.log(2));
-	}
+	}*/
 
-	private void pieceIndexToByte(long pieceIndex, byte[] payload) {
+/*	private void pieceIndexToByte(long pieceIndex, byte[] payload) {
 		long pieceIndexValue = (long) Math.pow(2, pieceIndex);
 		for (int i = 0; i < 4; i++) {
 			payload[3 - i] = (byte) (0xff & (pieceIndexValue >> 8 * i));
 			;
+		}
+	}*/
+	
+	public  void sendChockMessage(){
+		Message request = new Message();
+		byte[] packet = request.packMessage(Message.MessageType.CHOKE, null);
+		try {
+			outStream.write(packet);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	public void sendUnChockMessage(){
+		Message request = new Message();
+		byte[] packet = request.packMessage(Message.MessageType.UNCHOKE, null);
+		try {
+			outStream.write(packet);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public void sendHaveMessage(byte[] piece_index) {
+		Message request = new Message();
+		byte[] packet = request.packMessage( Message.MessageType.HAVE, piece_index);
+		try {
+			outStream.write(packet);
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 /**

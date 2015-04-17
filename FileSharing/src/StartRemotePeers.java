@@ -3,9 +3,9 @@ import java.io.FileReader;
 import java.io.IOException;
 
 public class StartRemotePeers{
-	public static void main(String args){
+	public static void main(String args[]){
 		String path=System.getProperty("user.dir");
-		
+		 System.out.println("path is:" + path);
 		//read peer info
 		String st;
 		try {
@@ -20,7 +20,7 @@ public class StartRemotePeers{
 					
 					// *********************** IMPORTANT *************************** //
 					// If your program is JAVA, use this line.
-			     Runtime.getRuntime().exec("ssh " + hostname + " cd " + path + "; java PeerProcess " + peerId);
+			     Runtime.getRuntime().exec("ssh-keygen -R " + hostname + " cd " + path + "; java PeerProcess " + peerId);
 			
 			}
 			

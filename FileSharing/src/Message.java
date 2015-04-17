@@ -23,9 +23,16 @@ public class Message {
 	 *            the message body
 	 * @return byte stream of the message to be send over tcp socket
 	 */
-	public byte[] packMessage(int msgLength, MessageType type, byte[] payload) {
-		byte[] message=new byte[4+1+payload.length];
-		System.arraycopy(this.messageLengthToByte(msgLength), 0, message, 0, 4);
+	public byte[] packMessage( MessageType type, byte[] payload) {
+		byte[] message;
+		if(payload!=null) {
+		    message=new byte[4+1+payload.length];
+		    messageLength = 1+payload.length;
+		} else {
+			message=new byte[5];
+			messageLength = 1;
+		}
+		System.arraycopy(String.format("%4d", messageLength).getBytes(), 0, message, 0, 4);
 		switch(type) {
 		case CHOKE:
 			message[4]=0;
@@ -51,6 +58,7 @@ public class Message {
 		case PIECE:
 			message[4]=7;
 		}
+		if(payload!=null)
 		System.arraycopy(payload, 0, message, 5, payload.length);
 		return message;
 	
@@ -64,8 +72,8 @@ public class Message {
 	 *            the byte stream that comes from a peer over the socket
 	 */
 	public void unpack(byte[] messageStream) {
-         this.messageLength=(int)this.getMessageLength(messageStream);
-         int typevalue=messageStream[4];
+ //        this.messageLength=(int)this.getMessageLength(messageStream);
+         int typevalue=messageStream[0];
          switch(typevalue){
          case 0:
         	 this.messageType=MessageType.CHOKE;
@@ -92,24 +100,24 @@ public class Message {
         	 this.messageType=MessageType.PIECE;
         	 break;
          }
-         messagePayload = new byte[messageStream.length-5];
-         System.arraycopy(messageStream, 5, this.messagePayload, 0, messagePayload.length);
+         messagePayload = new byte[messageStream.length-1];
+         System.arraycopy(messageStream, 1, this.messagePayload, 0, messagePayload.length);
 	}
-	private byte[] messageLengthToByte(long messageLength ) {
+/*	private byte[] messageLengthToByte(long messageLength ) {
 		byte[] length = new byte[4];
 		for (int i = 0; i < 4; i++) {
 			length[3 - i] = (byte) (0xff & (messageLength >> 8 * i));
 		}
 		return length;
-	}
+	}*/
 	
-	private long getMessageLength(byte[] payload) {
+/*	private long getMessageLength(byte[] payload) {
 		Long result = 0L;
 		for (int i = 0; i < 4; i++) {
 			result = (result << 8) + (payload[i] & 0xff);
 		}
 		return result;
-	}
+	}*/
 	public int getMessageLength() {
 		return messageLength;
 	}
